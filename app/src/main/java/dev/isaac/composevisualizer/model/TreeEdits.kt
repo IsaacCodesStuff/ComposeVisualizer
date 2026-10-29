@@ -20,6 +20,23 @@ fun Node.findParent(childId: String): Node? {
     return null
 }
 
+/** Where a node sits among its siblings, for enabling Up / Down. */
+data class SiblingPosition(val index: Int, val count: Int) {
+    val canMoveUp: Boolean get() = index > 0
+    val canMoveDown: Boolean get() = index < count - 1
+}
+
+/**
+ * Position of [id] among its siblings, or null if the node can't be
+ * reordered: the root, an unknown id, or the only child of a Surface.
+ */
+fun Node.siblingPositionOf(id: String): SiblingPosition? {
+    // Only Column children have an order.
+    val parent = findParent(id) as? ColumnNode ?: return null
+    val index = parent.children.indexOfFirst { it.id == id }
+    return if (index < 0) null else SiblingPosition(index, parent.children.size)
+}
+
 // ---- One level only: these change a single node's own children. ----
 
 private fun Node.addingChild(newChild: Node): Node = when (this) {

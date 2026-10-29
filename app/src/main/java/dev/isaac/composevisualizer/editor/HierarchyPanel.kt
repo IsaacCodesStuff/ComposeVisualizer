@@ -22,6 +22,7 @@ import dev.isaac.composevisualizer.model.Node
 import dev.isaac.composevisualizer.model.NodeKind
 import dev.isaac.composevisualizer.model.displayName
 import dev.isaac.composevisualizer.model.flatten
+import dev.isaac.composevisualizer.model.siblingPositionOf
 
 /** Actions on the selection, add controls, and the node tree as a selectable list. */
 @Composable
@@ -31,16 +32,23 @@ fun HierarchyPanel(
     selectedNode: Node?,
     onSelect: (String) -> Unit,
     onAddChild: (NodeKind) -> Unit,
+    onMove: (id: String, delta: Int) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Flatten once per tree change, not on every recomposition.
     val rows = remember(root) { root.flatten() }
+    // Recomputed only when the tree or the selection changes.
+    val position = remember(root, selectedId) {
+        selectedId?.let { root.siblingPositionOf(it) }
+    }
 
     Column(modifier = modifier) {
         NodeActionsBar(
             selected = selectedNode,
             isRoot = selectedNode?.id == root.id,
+            position = position,
+            onMove = onMove,
             onDelete = onDelete,
         )
         AddChildBar(selected = selectedNode, onAdd = onAddChild)

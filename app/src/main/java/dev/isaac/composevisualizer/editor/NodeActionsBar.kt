@@ -1,5 +1,6 @@
 package dev.isaac.composevisualizer.editor
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -15,19 +16,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import dev.isaac.composevisualizer.model.Node
+import dev.isaac.composevisualizer.model.SiblingPosition
 import dev.isaac.composevisualizer.model.childNodes
 import dev.isaac.composevisualizer.model.displayName
 import dev.isaac.composevisualizer.model.flatten
 
 /**
- * Actions on the selected node: its name, and Delete.
- * (Move up / down will join Delete here in the next stage.)
+ * Actions on the selected node: its name, Up, Down, and Delete.
+ * Stateless apart from the delete-confirmation dialog.
  */
 @Composable
 fun NodeActionsBar(
     selected: Node?,
     isRoot: Boolean,
+    position: SiblingPosition?,
+    onMove: (id: String, delta: Int) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -41,6 +46,9 @@ fun NodeActionsBar(
         else -> selected.displayName()
     }
 
+    // Tight padding so label + three buttons fit on a narrow phone.
+    val compact = PaddingValues(horizontal = 8.dp)
+
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -53,6 +61,20 @@ fun NodeActionsBar(
             modifier = Modifier.weight(1f),
         )
         TextButton(
+            onClick = { selected?.let { onMove(it.id, -1) } },
+            enabled = position?.canMoveUp == true,
+            contentPadding = compact,
+        ) {
+            Text("↑ Up")
+        }
+        TextButton(
+            onClick = { selected?.let { onMove(it.id, +1) } },
+            enabled = position?.canMoveDown == true,
+            contentPadding = compact,
+        ) {
+            Text("↓ Down")
+        }
+        TextButton(
             onClick = {
                 selected?.let { node ->
                     // Leaves go immediately; containers with content ask first.
@@ -60,6 +82,7 @@ fun NodeActionsBar(
                 }
             },
             enabled = canDelete,
+            contentPadding = compact,
             colors = ButtonDefaults.textButtonColors(
                 contentColor = MaterialTheme.colorScheme.error,
             ),

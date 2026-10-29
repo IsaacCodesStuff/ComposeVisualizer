@@ -119,6 +119,7 @@ private fun EditorPanel(
                         onAddChild = { kind ->
                             state.selectedId?.let { viewModel.addChild(it, kind) }
                         },
+                        onMove = viewModel::moveNode,
                         onDelete = viewModel::deleteNode,
                     )
                 }
