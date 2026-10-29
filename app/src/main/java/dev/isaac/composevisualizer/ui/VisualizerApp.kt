@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.isImeVisible
@@ -23,6 +25,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,29 +38,55 @@ import dev.isaac.composevisualizer.model.Node
 import dev.isaac.composevisualizer.render.PreviewTheme
 import dev.isaac.composevisualizer.render.RenderNode
 
-/** Top: component preview. Bottom: Properties / Hierarchy panel. */
+/**
+ * Portrait: preview on top, editor below.
+ * Landscape: editor on the left, preview on the right.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VisualizerApp(viewModel: VisualizerViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // While the keyboard is open, give the editor more room.
-    val previewWeight = if (WindowInsets.isImeVisible) 0.25f else 0.55f
+    // Decided from the window size, which the on-screen keyboard does not
+    // change. (Measuring the laid-out area instead could flip to landscape
+    // while typing, because the keyboard shrinks the height.)
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            PreviewArea(
-                root = state.root,
-                modifier = Modifier.weight(previewWeight).fillMaxWidth(),
-            )
-            EditorPanel(
-                state = state,
-                viewModel = viewModel,
-                modifier = Modifier.weight(1f - previewWeight).fillMaxWidth(),
-            )
+        if (isLandscape) {
+            Row(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+                EditorPanel(
+                    state = state,
+                    viewModel = viewModel,
+                    // Rounded on the edge facing the preview.
+                    shape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
+                    modifier = Modifier.weight(0.5f).fillMaxHeight(),
+                )
+                PreviewArea(
+                    root = state.root,
+                    modifier = Modifier.weight(0.5f).fillMaxHeight(),
+                )
+            }
+        } else {
+            // While the keyboard is open, give the editor more room.
+            val previewWeight = if (WindowInsets.isImeVisible) 0.25f else 0.55f
+
+            Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+                PreviewArea(
+                    root = state.root,
+                    modifier = Modifier.weight(previewWeight).fillMaxWidth(),
+                )
+                EditorPanel(
+                    state = state,
+                    viewModel = viewModel,
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                    modifier = Modifier.weight(1f - previewWeight).fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -83,13 +113,14 @@ private enum class EditorTab(val title: String) {
 private fun EditorPanel(
     state: EditorUiState,
     viewModel: VisualizerViewModel,
+    shape: Shape,
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column {
@@ -114,7 +145,9 @@ private fun EditorPanel(
                         root = state.root,
                         selectedId = state.selectedId,
                         selectedNode = state.selectedNode,
+                        collapsedIds = state.collapsedIds,
                         onSelect = viewModel::select,
+                        onToggleCollapsed = viewModel::toggleCollapsed,
                         // Add under whatever is selected at the moment of the tap.
                         onAddChild = { kind ->
                             state.selectedId?.let { viewModel.addChild(it, kind) }

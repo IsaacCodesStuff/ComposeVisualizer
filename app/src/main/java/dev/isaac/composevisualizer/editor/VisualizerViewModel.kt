@@ -7,8 +7,10 @@ import dev.isaac.composevisualizer.model.NodeKind
 import dev.isaac.composevisualizer.model.SampleNodes
 import dev.isaac.composevisualizer.model.SurfaceNode
 import dev.isaac.composevisualizer.model.TextNode
+import dev.isaac.composevisualizer.model.childNodes
 import dev.isaac.composevisualizer.model.findNode
 import dev.isaac.composevisualizer.model.findParent
+import dev.isaac.composevisualizer.model.pathTo
 import dev.isaac.composevisualizer.model.updateNode
 import dev.isaac.composevisualizer.model.withInserted
 import dev.isaac.composevisualizer.model.withMoved
@@ -18,10 +20,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Everything the editor screen needs to draw itself. Immutable. */
+/**
+ * Everything the editor screen needs to draw itself. Immutable.
+ *
+ * [collapsedIds] is UI state about the hierarchy list, not part of the
+ * component itself. Invariant: the selected node is never hidden inside
+ * a collapsed branch (see [withSelectionRevealed]).
+ */
 data class EditorUiState(
     val root: Node,
     val selectedId: String?,
+    val collapsedIds: Set<String> = emptySet(),
 ) {
     /** Derived on demand, so it can never disagree with the tree. */
     val selectedNode: Node? get() = selectedId?.let { root.findNode(it) }
@@ -36,9 +45,36 @@ class VisualizerViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
 
+    /** Selects a node. If it was hidden in a collapsed branch, the branch opens. */
     fun select(id: String) {
         _uiState.update { state ->
-            if (state.root.findNode(id) != null) state.copy(selectedId = id) else state
+            if (state.root.findNode(id) == null) {
+                state
+            } else {
+                state.copy(selectedId = id).withSelectionRevealed()
+            }
+        }
+    }
+
+    /** Collapses or expands a node's children. Nodes without children are ignored. */
+    fun toggleCollapsed(id: String) {
+        _uiState.update { state ->
+            val node = state.root.findNode(id) ?: return@update state
+            if (node.childNodes().isEmpty()) return@update state
+
+            if (id in state.collapsedIds) {
+                state.copy(collapsedIds = state.collapsedIds - id)
+            } else {
+                // Collapsing must not leave the selection invisible inside the branch:
+                // if it is a descendant of this node, select this node instead.
+                val selected = state.selectedId
+                val hidesSelection =
+                    selected != null && selected != id && node.findNode(selected) != null
+                state.copy(
+                    collapsedIds = state.collapsedIds + id,
+                    selectedId = if (hidesSelection) id else selected,
+                )
+            }
         }
     }
 
@@ -61,7 +97,10 @@ class VisualizerViewModel : ViewModel() {
 
     // ---- Structural edits (Milestone 4) ----
 
-    /** Adds a new default node of [kind] under [parentId] and selects it. */
+    /**
+     * Adds a new default node of [kind] under [parentId] and selects it.
+     * If the parent was collapsed it opens, so the new node is visible.
+     */
     fun addChild(parentId: String, kind: NodeKind) {
         // Created outside update{}: if update retries, the id stays the same.
         val newNode = kind.createDefault()
@@ -70,7 +109,9 @@ class VisualizerViewModel : ViewModel() {
             if (newRoot === state.root) {
                 state // impossible add (unknown parent, Text, full Surface): do nothing
             } else {
-                state.copy(root = newRoot, selectedId = newNode.id)
+                state
+                    .copy(root = newRoot, selectedId = newNode.id)
+                    .withSelectionRevealed()
             }
         }
     }
@@ -88,10 +129,17 @@ class VisualizerViewModel : ViewModel() {
 
             val selected = state.selectedId
             val selectionSurvived = selected != null && newRoot.findNode(selected) != null
-            state.copy(
-                root = newRoot,
-                selectedId = if (selectionSurvived) selected else parent.id,
-            )
+            // Forget collapsed ids of nodes that no longer exist.
+            val prunedCollapsed = state.collapsedIds.filterTo(mutableSetOf()) {
+                newRoot.findNode(it) != null
+            }
+            state
+                .copy(
+                    root = newRoot,
+                    selectedId = if (selectionSurvived) selected else parent.id,
+                    collapsedIds = prunedCollapsed,
+                )
+                .withSelectionRevealed()
         }
     }
 
@@ -102,6 +150,18 @@ class VisualizerViewModel : ViewModel() {
             if (newRoot === state.root) state else state.copy(root = newRoot)
         }
     }
+}
+
+/**
+ * Enforces the invariant "the selected node is never hidden": opens every
+ * collapsed ancestor of the selection. Returns the same instance if nothing
+ * needed opening, so no-ops stay no-ops.
+ */
+private fun EditorUiState.withSelectionRevealed(): EditorUiState {
+    val id = selectedId ?: return this
+    val ancestorIds = root.pathTo(id)?.dropLast(1)?.map { it.id }?.toSet() ?: return this
+    val revealed = collapsedIds - ancestorIds
+    return if (revealed.size == collapsedIds.size) this else copy(collapsedIds = revealed)
 }
 
 private fun initialState(): EditorUiState {

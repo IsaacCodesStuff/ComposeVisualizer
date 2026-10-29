@@ -17,6 +17,18 @@ fun Node.findNode(id: String): Node? {
 }
 
 /**
+ * The chain of nodes from this node down to [id], both included
+ * (e.g. root, column, text). Null if [id] is not in this tree.
+ */
+fun Node.pathTo(id: String): List<Node>? {
+    if (this.id == id) return listOf(this)
+    for (child in childNodes()) {
+        child.pathTo(id)?.let { return listOf(this) + it }
+    }
+    return null
+}
+
+/**
  * Returns a new tree in which the node with [id] is replaced by
  * transform(node). Everything else is preserved: ancestors are rebuilt
  * with copy(), and untouched subtrees are returned as the *same instance*.
@@ -47,6 +59,16 @@ data class FlatNode(val node: Node, val depth: Int)
 /** The whole tree as a flat, depth-first list (parent before children). */
 fun Node.flatten(depth: Int = 0): List<FlatNode> =
     listOf(FlatNode(this, depth)) + childNodes().flatMap { it.flatten(depth + 1) }
+
+/**
+ * Like [flatten], but the children of any node in [collapsedIds] are left out.
+ * The collapsed node itself is still listed.
+ */
+fun Node.flattenVisible(collapsedIds: Set<String>, depth: Int = 0): List<FlatNode> {
+    val self = FlatNode(this, depth)
+    if (id in collapsedIds) return listOf(self)
+    return listOf(self) + childNodes().flatMap { it.flattenVisible(collapsedIds, depth + 1) }
+}
 
 /** Short label for the hierarchy and the properties header. */
 fun Node.displayName(): String = when (this) {
