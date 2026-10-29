@@ -38,12 +38,9 @@ import dev.isaac.composevisualizer.render.RenderNode
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VisualizerApp(viewModel: VisualizerViewModel = viewModel()) {
-    // Collects the StateFlow only while the app is at least STARTED,
-    // and exposes it as Compose state. Every new value recomposes the UI.
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     // While the keyboard is open, give the editor more room.
-    // Delete these two lines (and use 0.55f) to keep a fixed split.
     val previewWeight = if (WindowInsets.isImeVisible) 0.25f else 0.55f
 
     Surface(
@@ -64,10 +61,7 @@ fun VisualizerApp(viewModel: VisualizerViewModel = viewModel()) {
     }
 }
 
-/**
- * Unchanged in behavior: the component keeps its own size, centered,
- * in its own theme, with no device frame.
- */
+/** The component keeps its own size, centered, in its own theme, with no device frame. */
 @Composable
 private fun PreviewArea(root: Node, modifier: Modifier = Modifier) {
     Box(
@@ -119,7 +113,12 @@ private fun EditorPanel(
                     EditorTab.Hierarchy -> HierarchyPanel(
                         root = state.root,
                         selectedId = state.selectedId,
+                        selectedNode = state.selectedNode,
                         onSelect = viewModel::select,
+                        // Add under whatever is selected at the moment of the tap.
+                        onAddChild = { kind ->
+                            state.selectedId?.let { viewModel.addChild(it, kind) }
+                        },
                     )
                 }
             }
