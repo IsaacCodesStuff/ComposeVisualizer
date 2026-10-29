@@ -23,7 +23,7 @@ import dev.isaac.composevisualizer.model.NodeKind
 import dev.isaac.composevisualizer.model.displayName
 import dev.isaac.composevisualizer.model.flatten
 
-/** The node tree as an indented, selectable list, with the add controls above it. */
+/** Actions on the selection, add controls, and the node tree as a selectable list. */
 @Composable
 fun HierarchyPanel(
     root: Node,
@@ -31,12 +31,18 @@ fun HierarchyPanel(
     selectedNode: Node?,
     onSelect: (String) -> Unit,
     onAddChild: (NodeKind) -> Unit,
+    onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Flatten once per tree change, not on every recomposition.
     val rows = remember(root) { root.flatten() }
 
     Column(modifier = modifier) {
+        NodeActionsBar(
+            selected = selectedNode,
+            isRoot = selectedNode?.id == root.id,
+            onDelete = onDelete,
+        )
         AddChildBar(selected = selectedNode, onAdd = onAddChild)
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
