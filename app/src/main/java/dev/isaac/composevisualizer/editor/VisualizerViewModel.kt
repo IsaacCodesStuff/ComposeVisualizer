@@ -26,14 +26,31 @@ import kotlinx.coroutines.flow.update
  * [collapsedIds] is UI state about the hierarchy list, not part of the
  * component itself. Invariant: the selected node is never hidden inside
  * a collapsed branch (see [withSelectionRevealed]).
+ *
+ * [configId], [configName] and [savedRoot] describe the saved configuration
+ * this tree came from or was last saved as. They are plain data: this class
+ * knows nothing about files. [savedRoot] is the tree exactly as it was last
+ * saved or loaded, which is what [isDirty] compares against. A brand-new state
+ * counts as clean (it starts equal to its own root).
  */
 data class EditorUiState(
     val root: Node,
     val selectedId: String?,
     val collapsedIds: Set<String> = emptySet(),
+    val configId: String? = null,
+    val configName: String? = null,
+    val savedRoot: Node? = root,
 ) {
     /** Derived on demand, so it can never disagree with the tree. */
     val selectedNode: Node? get() = selectedId?.let { root.findNode(it) }
+
+    /**
+     * True when the tree differs from the last saved/loaded version, or has no
+     * saved version at all (null [savedRoot], e.g. after its file was deleted).
+     * Plain value equality: edit something and edit it back, and it's clean again.
+     * Unchanged subtrees are shared instances, so the comparison is cheap.
+     */
+    val isDirty: Boolean get() = savedRoot == null || root != savedRoot
 }
 
 /**
@@ -149,6 +166,43 @@ class VisualizerViewModel : ViewModel() {
             val newRoot = state.root.withMoved(id, delta)
             if (newRoot === state.root) state else state.copy(root = newRoot)
         }
+    }
+
+    // ---- Saved configurations (Milestone 5) ----
+    // These only swap plain data in and out of the state. Reading and writing
+    // files is someone else's job, so this class needs no Context.
+
+    /**
+     * Replaces everything with a configuration that was just loaded: the tree,
+     * its id and name, and a clean "nothing changed yet" baseline. Selection
+     * resets to the root and every branch is expanded; neither is saved.
+     */
+    fun loadConfiguration(id: String, name: String, root: Node) {
+        _uiState.value = EditorUiState(
+            root = root,
+            selectedId = root.id,
+            configId = id,
+            configName = name,
+            savedRoot = root,
+        )
+    }
+
+    /**
+     * Records that [savedRoot] was just written as configuration [id]. Pass the
+     * tree that was actually saved, not whatever is current: if the user kept
+     * editing while the save ran, those newer edits must stay "unsaved".
+     * The tree, selection and collapsed state are untouched.
+     */
+    fun markSaved(id: String, name: String, savedRoot: Node) {
+        _uiState.update { it.copy(configId = id, configName = name, savedRoot = savedRoot) }
+    }
+
+    /**
+     * Forgets the saved configuration without touching the tree, for when its
+     * file was deleted. The tree now exists only in memory, so it counts as unsaved.
+     */
+    fun detachConfiguration() {
+        _uiState.update { it.copy(configId = null, configName = null, savedRoot = null) }
     }
 }
 
